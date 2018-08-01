@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Aug  1 11:01:59 2018
+
+@author: aizhana
+"""
+
+import fishchips.experiments as experiments
+from fishchips.cosmo import Observables
+import fishchips.util
+
+from classy import Class
+import numpy as np
+import matplotlib.pyplot as plt
+fiducial_data = np.genfromtxt("/u/aizhana/Projects/CodeCombined/Fisher/output/linear/lcdm_pt_linear_cl_lensed.dat")[:,:]
+pars = np.array( ['omega_b', 'omega_cdm', 'H0',  'ln10^{10}A_s', 'n_s', 'z_reio'])
+centers = np.array([0.02230,  0.1188,  67.74,  3.056, 0.9619, 8.8])
+steps = np.array([0.0002230,  0.001188,  0.006774,  2.142e-11, 0.009619, 0.088])
+
+
+obs = Observables(parameters=pars,
+                  fiducial=centers,
+                  left=centers-steps,
+                  right=centers+steps)
+# generate a template CLASS python wrapper configuration
+classy_template = {'output': 'tCl pCl lCl mPk',
+                   'l_max_scalars': 2500,
+                   'lensing': 'yes',
+                   'N_eff': 3.046,
+                   'k_per_decade_for_pk': 10,
+                   'Omega_Lambda': 0.6911,
+                   'non linear':'',
+                   'modes': 's,t',
+                   'k_pivot':0.05,
+                   'P_k_max_h/Mpc': 100.,
+                   'z_pk': 0.}
+# add in the fiducial values too
+classy_template.update(dict(zip(obs.parameters, obs.fiducial)))
+# generate the fiducial cosmology
+obs.compute_cosmo(key='CLASS_fiducial', classy_dict=classy_template)
+fid = obs.cosmos['CLASS_fiducial']
+ell = np.linspace(2, 2500, 2499)
+print(len(fid.lensed_cl()['tt']))
+plt.figure()
+plt.plot(ell, fid.lensed_cl()['ee'][2:]*(ell+1)*ell)
+print(fid.lensed_cl()['ee'][2:]*(ell+1)*ell/fiducial_data[:,2])
+print(fid.lensed_cl()['tt'][2:]*(ell+1)*ell/fiducial_data[:,1])
+print(fid.lensed_cl()['te'][2:]*(ell+1)*ell/fiducial_data[:,3])
