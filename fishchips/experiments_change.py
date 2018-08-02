@@ -129,7 +129,7 @@ class CMB_Primary(Experiment):
         ClTT = fid['tt']#/fid['ell']/(fid['ell']+1)
         ClTE = fid['te']#/fid['ell']/(fid['ell']+1)
         ClEE = fid['ee']#/fid['ell']/(fid['ell']+1)
-        ClKK = fid['pp']*fid['ell']/(fid['ell']+1) # since class gives Clpp*(l+1)*l, and ClKK is ClPP*(l+1)*l, according to Wu
+        ClKK = fid['pp']*(fid['ell']*(fid['ell']+1))**2 # since class gives Clpp*(l+1)*l, and ClKK is ClPP*(l+1)*l, according to Wu
 
         for i, j in itertools.combinations_with_replacement(range(npar), r=2):
             # following eq 4 of https://arxiv.org/pdf/1402.4108.pdf
@@ -137,18 +137,19 @@ class CMB_Primary(Experiment):
             # probably a more efficient way to do this exists
             for l in range(self.l_min, self.l_max):
 
-                Cl = np.array([[ClTT[l-2] + self.noise_T[l], ClTE[l-2] + self.noise_TE[l], 0],
-                               [ClTE[l-2] + self.noise_TE[l], ClEE[l-2] + self.noise_P[l], 0], 
-                               [0, 0, ClKK[l-2] + self.noise_K[l]]])
-                print(l)
+                Cl = np.array([[ClTT[l] + self.noise_T[l], ClTE[l] + self.noise_TE[l], 0],
+                               [ClTE[l] + self.noise_TE[l], ClEE[l] + self.noise_P[l], 0], 
+                               [0, 0, ClKK[l] + self.noise_K[l]]])
+                #print(l)
+                #print(Cl)
                 invCl = np.linalg.inv(Cl)
 
-                dCl_i = np.array([[df[pars[i]+'_tt'][l-2], df[pars[i]+'_te'][l-2], 0],
-                                  [df[pars[i]+'_te'][l-2], df[pars[i]+'_ee'][l-2], 0],
-                                  [0, 0, df[pars[i]+'_pp'][l-2]]])
-                dCl_j = np.array([[df[pars[j]+'_tt'][l-2], df[pars[j]+'_te'][l-2], 0],
-                                  [df[pars[j]+'_te'][l-2], df[pars[j]+'_ee'][l-2], 0],
-                                  [0, 0, df[pars[j]+'_pp'][l-2]]])
+                dCl_i = np.array([[df[pars[i]+'_tt'][l], df[pars[i]+'_te'][l], 0],
+                                  [df[pars[i]+'_te'][l], df[pars[i]+'_ee'][l], 0],
+                                  [0, 0, df[pars[i]+'_pp'][l]*(l*(l+1))**2]])
+                dCl_j = np.array([[df[pars[j]+'_tt'][l], df[pars[j]+'_te'][l], 0],
+                                  [df[pars[j]+'_te'][l], df[pars[j]+'_ee'][l], 0],
+                                  [0, 0, df[pars[j]+'_pp'][l]*(l*(l+1))**2]])
 
                 inner_term = np.dot(np.dot(invCl, dCl_i), np.dot(invCl, dCl_j))
                 fisher_contrib = (2*l+1)/2. * self.f_sky * np.trace(inner_term)
@@ -209,6 +210,57 @@ class CMB_Primary(Experiment):
         return self.compute_fisher_from_spectra(fid,
                                                 df,
                                                 obs.parameters)
+    def get_fisher_different(self, obs, lensed_Cl=True):
+        """
+        Return a Fisher matrix using a dictionary full of CLASS objects.
+
+        This function wraps the functionality of `compute_fisher_from_spectra`,
+        for use with a dictionary filled with CLASS objects.
+
+        Parameters
+        ----------
+            obs (Observations instance) : contains many evaluated CLASS cosmologies, at
+                both the derivatives and the fiducial in the cosmos object.
+
+        Returns
+        -------
+            Numpy array of floats with dimensions (len(params), len(params))
+
+        """
+        # first compute the fiducial
+        fid_cosmo = obs.cosmos['CLASS_fiducial']
+        Tcmb = fid_cosmo.T_cmb()
+        if lensed_Cl:
+            fid_cl = fid_cosmo.lensed_cl(self.l_max)
+        else:
+            fid_cl = fid_cosmo.raw_cl(self.l_max)
+        fid = {'tt': (Tcmb*1.0e6)**2 * fid_cl['tt'],
+               'te': (Tcmb*1.0e6)**2 * fid_cl['te'],
+               'ee': (Tcmb*1.0e6)**2 * fid_cl['ee'],
+               'pp': (Tcmb*1.0e6)**2 * fid_cl['pp'], 
+               'ell': fid_cl['ell']}
+        #print(fid)
+        # the primary task of this function is to compute the derivatives from `cosmos`,
+        # the dictionary of computed CLASS cosmologies
+        dx_array = np.array(obs.right) - np.array(obs.left)
+
+        df = {}
+        # loop over parameters, and compute derivatives
+        for par, dx in zip(obs.parameters, dx_array):
+            if lensed_Cl:
+                cl_left = obs.cosmos[par + '_CLASS_left'].lensed_cl(self.l_max)
+                cl_right = obs.cosmos[par + '_CLASS_right'].lensed_cl(self.l_max)
+            else:
+                cl_left = obs.cosmos[par + '_CLASS_left'].raw_cl(self.l_max)
+                cl_right = obs.cosmos[par + '_CLASS_right'].raw_cl(self.l_max)
+
+            for spec_xy in ['tt', 'te', 'ee', 'pp']:
+                df[par + '_' + spec_xy] = (Tcmb*1.0e6)**2 *\
+                    (cl_right[spec_xy] - cl_left[spec_xy]) / dx
+        #print (df)
+        return self.compute_fisher_from_spectra(fid,
+                                                df,
+                                                obs.parameters)
     def get_fisher_changed(self, fid_cl, params, cl_right, cl_left, stepsize):
         """
         Return a Fisher matrix using a dictionary full of CLASS objects.
@@ -237,15 +289,83 @@ class CMB_Primary(Experiment):
                'ee': (Tcmb*1.0e6)**2 * fid_cl['ee']/fid_cl['ell']/(fid_cl['ell']+1),
                'pp': (Tcmb*1.0e6)**2 * fid_cl['pp']/fid_cl['ell']/(fid_cl['ell']+1),
                'ell': fid_cl['ell']}
+        #print(fid)
         df = {}
         # loop over parameters, and compute derivatives
         for i in range(len(params)):
-            for spec_xy in ['tt', 'te', 'ee', 'pp']:
-                df[params[i] + '_' + spec_xy] = (Tcmb*1.0e6)**2 *(cl_right[i][spec_xy] - cl_left[i][spec_xy])/ (2*stepsize[i])/fid_cl['ell']/(fid_cl['ell']+1)
-      
-        return self.compute_fisher_from_spectra(fid,
+            #for spec_xy in ['tt', 'te', 'ee', 'pp']:
+                #df[params[i] + '_' + spec_xy] = (Tcmb*1.0e6)**2 *(cl_right[i][spec_xy] - cl_left[i][spec_xy])/\
+                #(stepsize[i])#/fid_cl['ell']/(fid_cl['ell']+1)
+            df[params[i] + '_' + 'tt'] = (Tcmb*1.0e6)**2 *(cl_right[i]['tt'] - cl_left[i]['tt'])/\
+            (stepsize[i])/fid_cl['ell']/(fid_cl['ell']+1)
+            df[params[i] + '_' + 'te'] = (Tcmb*1.0e6)**2 *(cl_right[i]['te'] - cl_left[i]['te'])/\
+            (stepsize[i])/fid_cl['ell']/(fid_cl['ell']+1)
+            df[params[i] + '_' + 'ee'] = (Tcmb*1.0e6)**2 *(cl_right[i]['ee'] - cl_left[i]['ee'])/\
+            (stepsize[i])/fid_cl['ell']/(fid_cl['ell']+1)
+            df[params[i] + '_' + 'pp'] = (Tcmb*1.0e6)**2 *(cl_right[i]['pp'] - cl_left[i]['pp'])/\
+            (stepsize[i])/fid_cl['ell']/(fid_cl['ell']+1)
+        #print(df)
+        return self.compute_fisher_from_spectra_changed(fid,
                                                 df,
                                                 params)
+    def compute_fisher_from_spectra_changed(self, fid, df, pars):
+        """
+        Compute the Fisher matrix given fiducial and derivative dicts.
+
+        This function is for generality, to enable easier interfacing with
+        codes like CAMB. The input parameters must be in the units of the
+        noise, muK^2.
+
+        Parameters
+        ----------
+        fid (dictionary) : keys are '{parameter_XY}' with XY in {tt, te, ee}.
+            These keys point to the actual power spectra.
+
+        df (dictionary) :  keys are '{parameter_XY}' with XY in {tt, te, ee}.
+            These keys point to numerically estimated derivatives generated
+            from precomputed cosmologies.
+
+        pars (list of strings) : the parameters being constrained in the
+            Fisher analysis.
+
+        """
+        npar = len(pars)
+        self.fisher = np.zeros((npar, npar))
+        self.fisher_ell = np.zeros(self.l_max)
+        ClTT = fid['tt']#/fid['ell']/(fid['ell']+1)
+        ClTE = fid['te']#/fid['ell']/(fid['ell']+1)
+        ClEE = fid['ee']#/fid['ell']/(fid['ell']+1)
+        ClKK = fid['pp']*(fid['ell']*(fid['ell']+1))**2 # since class gives Clpp*(l+1)*l, and ClKK is ClPP*(l+1)*l, according to Wu
+
+        for i, j in itertools.combinations_with_replacement(range(npar), r=2):
+            # following eq 4 of https://arxiv.org/pdf/1402.4108.pdf
+            fisher_ij = 0.0
+            # probably a more efficient way to do this exists
+            for l in range(self.l_min, self.l_max):
+
+                Cl = np.array([[ClTT[l-2] + self.noise_T[l], ClTE[l-2] + self.noise_TE[l], 0],
+                               [ClTE[l-2] + self.noise_TE[l], ClEE[l-2] + self.noise_P[l], 0], 
+                               [0, 0, ClKK[l-2] + self.noise_K[l]]])
+                #print(l)
+                invCl = np.linalg.inv(Cl)
+
+                dCl_i = np.array([[df[pars[i]+'_tt'][l-2], df[pars[i]+'_te'][l-2], 0],
+                                  [df[pars[i]+'_te'][l-2], df[pars[i]+'_ee'][l-2], 0],
+                                  [0, 0, df[pars[i]+'_pp'][l-2]*(l*(l+1))**2]])
+                dCl_j = np.array([[df[pars[j]+'_tt'][l-2], df[pars[j]+'_te'][l-2], 0],
+                                  [df[pars[j]+'_te'][l-2], df[pars[j]+'_ee'][l-2], 0],
+                                  [0, 0, df[pars[j]+'_pp'][l-2]*(l*(l+1))**2]])
+
+                inner_term = np.dot(np.dot(invCl, dCl_i), np.dot(invCl, dCl_j))
+                fisher_contrib = (2*l+1)/2. * self.f_sky * np.trace(inner_term)
+                fisher_ij += fisher_contrib
+
+            # fisher is diagonal, so we get half of the matrix for free
+            self.fisher[i, j] = fisher_ij
+            self.fisher[j, i] = fisher_ij
+
+        return self.fisher
+
 
 
 
@@ -362,7 +482,7 @@ def get_S3(theta=1.4, error=10.0, f_sky=0.4):
                            sigma_P = [1.4*error],
                            f_sky = f_sky,
                            l_min = 100,
-                           l_max = 3000)
+                           l_max = 2500) #3000)
     
     tau_prior = Prior( 'tau_reio', 0.01 )
     

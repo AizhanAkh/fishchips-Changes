@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 
 pars = np.array( ['omega_b', 'omega_cdm', 'h',  'A_s', 'n_s', 'tau_reio'])
 centers = np.array([0.02230,  0.1188,  0.6774,  2.142e-9, 0.9619, 0.66])
-steps = np.array([0.0002230,  0.001188,  0.006774,  2.142e-11, 0.009619, 0.0066])
+steps = np.array([0.0001,  0.001188,  0.006774,  2.142e-11, 0.009619, 0.0066])
 
 
 obs = Observables(parameters=pars,
@@ -24,9 +24,19 @@ obs = Observables(parameters=pars,
                   left=centers-steps,
                   right=centers+steps)
 # generate a template CLASS python wrapper configuration
-classy_template = {'output': 'tCl pCl lCl',
+#classy_template = {'output': 'tCl pCl lCl',
+ #                  'l_max_scalars': 2500,
+  #                 'lensing': 'yes'}
+classy_template = {'output': 'tCl pCl lCl mPk',
                    'l_max_scalars': 2500,
-                   'lensing': 'yes'}
+                   'lensing': 'yes',
+                   'N_eff': 3.046,
+                   'k_per_decade_for_pk': 10,
+                   'Omega_Lambda': 0.6911,
+                   'modes': 's,t'}
+                   #'k_pivot':0.05,
+                   #'P_k_max_h/Mpc': 100.,
+                   #'z_pk': 0.}
 # add in the fiducial values too
 classy_template.update(dict(zip(obs.parameters, obs.fiducial)))
 # generate the fiducial cosmology
@@ -50,3 +60,10 @@ example_Planck = experiments.get_PlanckPol_combine()
 fisher = example_Planck[0].get_fisher(obs)+example_Planck[1].get_fisher(obs)+example_Planck[2].get_fisher(obs)
 cov = np.linalg.inv(fisher)
 fishchips.util.plot_triangle(obs, cov);
+
+
+import fishchips.experiments_change as experiments_change
+example = experiments_change.CMB_Primary()
+fisher = example.get_fisher_different(obs)
+cov = np.linalg.inv(fisher)
+fishchips.util.plot_triangle(obs, cov)
