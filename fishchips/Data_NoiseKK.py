@@ -6,7 +6,7 @@ nlkk = np.array([1.02886566516913e-08,1.1194860550459957e-08,1.2505619136465732e
 def interpolate_noiseKK(l_min, l_max, noise_K = [], ell_K = []):
     
     ellK = np.linspace(l_min, l_max, (l_max-l_min+1))
-    if noise_K = []:
+    if noise_K == []:
         nlK = np.interp(ellK, ell, nlkk)
     else: 
         nlK = np.interp(ellK, ell_K, noise_K)

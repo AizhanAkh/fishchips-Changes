@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Aug  8 12:52:42 2018
+
+@author: aizhana
+"""
+
 # -*- coding: utf-8 -*-
 """Experiment objects for direct use and inheritance.
 
@@ -86,14 +94,14 @@ class CMB_Primary(Experiment):
         self.noise_T = np.zeros(self.l_max+1, 'float64')
         self.noise_P = np.zeros(self.l_max+1, 'float64')
         self.noise_TE = np.zeros(self.l_max+1, 'float64')
-        #if noiseK == []:
-         #  self.noise_K = NoiseK.interpolate_noiseKK(self.l_min, self.l_max)
-        #else:
-            #elf.noise_K = NoiseK.interpolate_noiseKK(self.l_min, self.l_max, noiseK[:,1], noiseK[:,0])
+        if noiseK == []:
+            self.noise_K = NoiseK.interpolate_noiseKK(self.l_min, self.l_max)
+        else:
+            self.noise_K = NoiseK.interpolate_noiseKK(self.l_min, self.l_max, noiseK[:,1], noiseK[:,0])
         
         #ell = np.linspace(self.l_min, self.l_max, (self.l_max-self.l_min+1))
         
-        self.noise_K = NoiseK.interpolate_noiseKK(self.l_min, self.l_max)
+        
         for l in range(self.l_min, self.l_max+1):
             self.noise_T[l] = 0
             self.noise_P[l] = 0
@@ -428,24 +436,24 @@ def get_PlanckPol_combine(other_exp_l_min=100):
                            sigma_P = [1e100,1e100,450,103,81,134,406],
                            f_sky = 0.2,
                            l_min = other_exp_l_min,
-                           l_max = 2500)
-                           #oiseK = noise_Planck_nkk)
+                           l_max = 2500,
+                           noiseK = noise_Planck_nkk)
 
     low_TEB = CMB_Primary(theta_fwhm=[33,    23,  14,  10, 7, 5, 5], 
                            sigma_T = [145,  149,  137,65, 43,66,200],
                            sigma_P = [1e100,1e100,450,103,81,134,406],
                            f_sky = 0.6,
                            l_min = 30,
-                           l_max = other_exp_l_min)
-                          #noiseK = noise_Planck_nkk)
+                           l_max = other_exp_l_min,
+                           noiseK = noise_Planck_nkk)
     
     TT = CMB_Primary(theta_fwhm=[33,    23,  14,  10, 7, 5, 5], 
                            sigma_T = [145,   149,  137,   65,   43,   66,  200],
                            sigma_P = [1e100,1e100,1e100,1e100,1e100,1e100,1e100],
                            f_sky = 0.6,
                            l_min = 2,
-                           l_max = 30)
-                          #niseK = noise_Planck_nkk)
+                           l_max = 30,
+                           noiseK = noise_Planck_nkk)
     
     return [TT, low_TEB, TEB] # NOTE NO TAU PRIOR, MUST INCLUDE WITH OTHER
 
@@ -499,14 +507,14 @@ def get_S4_changed(theta=1.5, error=1.0, f_sky=0.4):
                            sigma_P = [1.4*error],
                            f_sky = f_sky,
                            l_min = 300,
-                           l_max = 2500)
+                           l_max = 3000)
     
     # just P for 3000-5000
     high_ell = CMB_Primary(theta_fwhm=[theta], 
                            sigma_T = [1e100],
                            sigma_P = [1.4*error],
                            f_sky = f_sky,
-                           l_min = 2500,
+                           l_min = 3000,
                            l_max = 5000)
     
     tau_prior = Prior( 'tau_reio', 0.01 )
